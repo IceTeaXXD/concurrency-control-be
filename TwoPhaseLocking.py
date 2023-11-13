@@ -41,13 +41,17 @@ class TwoPhaseLocking:
                 return True
             else:
                 return False
-        else:  # Table is not locked
-            # Add the transaction to the lock table
-            self.shared_lock_table[table] = transaction
-            self.result.append(
-                {"operation": "SL", "transaction": transaction, "table": table})
-            self.transaction_history.append(f'SL{transaction}({table})')
-            return True
+        else: # Table is not exclusived locked
+            # If the table is locked by itself, return True
+            if table in self.shared_lock_table and self.shared_lock_table[table] == transaction:
+                    return True
+            else: # Check if the table is locked by a shared lock
+                # Add the transaction to the lock table
+                self.shared_lock_table[table] = transaction
+                self.result.append(
+                    {"operation": "SL", "transaction": transaction, "table": table})
+                self.transaction_history.append(f'SL{transaction}({table})')
+                return True
 
     def exclusive_lock(self, transaction: int, table: str) -> bool:
         # Check if the table is locked by a shared lock
@@ -231,3 +235,4 @@ if __name__ == "__main__":
 # R1(X);W2(X);W2(Y);W3(Y);W1(X);C1;C2;C3
 # R1(X);R2(Y);W1(Y);W1(X);W1(X);C1;C2
 # R1(X);R2(X);W1(X);W2(X);W3(X);C1;C2;C3
+# R1(X);R1(X);R2(X);R3(X);W1(X);W2(X);W3(X);C1;C2;C3
