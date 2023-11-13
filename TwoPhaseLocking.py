@@ -140,23 +140,30 @@ class TwoPhaseLocking:
     def abort(self, current: dict) -> None:
         self.transaction_history.append(
             f'Abort Transaction {current["transaction"]}')
+        # get all transaction that has the same transaction id
+        curr = [x for x in self.result if x["transaction"]== current["transaction"]]
+
+        # remove the current transaction from the result
         self.result = [
             x for x in self.result if x["transaction"] != current["transaction"]]
 
+        # get all transaction that has the same transaction id
+        seq = [x for x in self.sequence if x["transaction"]
+                == current["transaction"]]
+        
+        # remove the transaction from the sequence
+        self.sequence = [
+            x for x in self.sequence if x["transaction"] != current["transaction"]]
+        
         # if the current transaction has a lock in the lock table, remove it
         if current["transaction"] in self.exclusive_lock_table.values():
             self.exclusive_lock_table = {
                 k: v for k, v in self.exclusive_lock_table.items() if v != current["transaction"]}
 
-        # get all transaction that has the same transaction id
-        temp = [x for x in self.sequence if x["transaction"]
-                == current["transaction"]]
-        # remove the transaction from the sequence
-        self.sequence = [
-            x for x in self.sequence if x["transaction"] != current["transaction"]]
         # add the transaction to the end of the sequence
-        self.sequence.append(current)
-        self.sequence.extend(temp)
+        # self.sequence.append(current)
+        self.sequence.extend(curr)
+        self.sequence.extend(seq)
 
     def wait_die(self, current: dict) -> None:
         # check if the current transaction is older than the transaction that is locking the table
