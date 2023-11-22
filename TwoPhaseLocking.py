@@ -20,18 +20,27 @@ class TwoPhaseLocking:
                     if int(input[1]) not in self.timestamp:
                         self.timestamp.append(int(input[1]))
                 elif input[0] == 'C':
+                    id = int(input[1])
                     self.sequence.append(
-                        {"operation": input[0], "transaction": int(input[1])})
+                        {"operation": input[0], "transaction": id})
+                    # make sure that the transaction has a read or write operation
+                    if id not in self.timestamp:
+                        raise ValueError(
+                            "Transaction has no read or write operation")
+
                 else:
                     raise ValueError("Invalid operation detected")
             # Make sure that every transaction in the sequence has a commit
             if len([x for x in self.sequence if x["operation"] == 'C']) != len(set(self.timestamp)):
                 raise ValueError("Missing commit operation")
+            # Make sure every table is a single alphabet character, any symbol or number is not allowed
+            if any(len(x["table"]) != 1 or not x["table"].isalpha() for x in self.sequence if x["operation"] == 'R' or x["operation"] == 'W'):
+                raise ValueError("Invalid table name")
 
         except (ValueError) as e:
             raise ValueError(e)
         except Exception as e:
-            raise ValueError("Invalid sequence")
+            raise ValueError(e)
 
     def shared_lock(self, transaction: int, table: str) -> bool:
         # Check if the table is locked
@@ -41,13 +50,15 @@ class TwoPhaseLocking:
                 return True
             else:
                 return False
-        else: # Table is not exclusived locked
+        else:  # Table is not exclusived locked
             # If the table is locked by itself, return True
-            if table in self.shared_lock_table and self.shared_lock_table[table] == transaction:
-                    return True
-            else: # Check if the table is locked by a shared lock
-                # Add the transaction to the lock table
-                self.shared_lock_table[table] = transaction
+            if table in self.shared_lock_table and transaction in self.shared_lock_table[table]:
+                return True
+            else:  # Check if the table is locked by another shared lock
+                # Add the current transaction to the shared lock table
+                if table not in self.shared_lock_table:
+                    self.shared_lock_table[table] = []
+                self.shared_lock_table[table].append(transaction)
                 self.result.append(
                     {"operation": "SL", "transaction": transaction, "table": table})
                 self.transaction_history.append(f'SL{transaction}({table})')
@@ -56,8 +67,8 @@ class TwoPhaseLocking:
     def exclusive_lock(self, transaction: int, table: str) -> bool:
         # Check if the table is locked by a shared lock
         if table in self.shared_lock_table:
-            # Check if the table is locked by the same transaction
-            if self.shared_lock_table[table] == transaction:
+            # Check if the table is locked by the same transaction and the transaction is the only one in the shared lock table
+            if transaction in self.shared_lock_table[table] and len(self.shared_lock_table[table]) == 1:
                 # remove the shared lock
                 self.shared_lock_table = {
                     k: v for k, v in self.shared_lock_table.items() if v != transaction}
@@ -85,19 +96,22 @@ class TwoPhaseLocking:
                 return True
 
     def clear_shared_lock(self, current: dict) -> None:
-        if current["transaction"] in self.shared_lock_table.values():
-            # get the table that is locked by the current transaction
-            table = [
-                k for k, v in self.shared_lock_table.items() if v == current["transaction"]]
-            #  add the transaction to the transaction history
-            for t in table:
-                self.result.append(
-                    {"operation": "UL", "transaction": current["transaction"], "table": t})
-                self.transaction_history.append(
-                    f'UL{current["transaction"]}({t})')
-            # remove the transaction from the lock table
-            self.shared_lock_table = {
-                k: v for k, v in self.shared_lock_table.items() if v != current["transaction"]}
+        # get the table that is locked by the current transaction
+        table = [
+            k for k, v in self.shared_lock_table.items() if v == current["transaction"]]
+        #  add the transaction to the transaction history
+        for t in table:
+            self.result.append(
+                {"operation": "UL", "transaction": current["transaction"], "table": t})
+            self.transaction_history.append(
+                f'UL{current["transaction"]}({t})')
+        # remove the transaction from the lock table
+        for k, v in self.shared_lock_table.items():
+            if current["transaction"] in v:
+                v.remove(current["transaction"])
+        # if the table is empty, remove it from the lock table
+        self.shared_lock_table = {
+            k: v for k, v in self.shared_lock_table.items() if v != []}
 
     def clear_exclusive_lock(self, current: dict) -> None:
         if current["transaction"] in self.exclusive_lock_table.values():
@@ -121,7 +135,8 @@ class TwoPhaseLocking:
             if self.exclusive_lock(transaction["transaction"], transaction["table"]):
                 # add the transaction to the result
                 self.result.append(transaction)
-                self.transaction_history.append(f'{transaction["operation"]}{transaction["transaction"]}({transaction["table"]})')
+                self.transaction_history.append(f'{transaction["operation"]}{
+                                                transaction["transaction"]}({transaction["table"]})')
             else:  # the table is locked
                 # add the transaction back to the queue
                 self.queue.insert(0, transaction)
@@ -139,42 +154,52 @@ class TwoPhaseLocking:
 
             # add the transaction to the result
             self.result.append(current)
-            self.transaction_history.append(f'{current["operation"]}{current["transaction"]}')
+            self.transaction_history.append(f'{current["operation"]}{
+                                            current["transaction"]}')
 
     def abort(self, current: dict) -> None:
         self.transaction_history.append(
             f'Abort Transaction {current["transaction"]}')
         # get all transaction that has the same transaction id
-        curr = [x for x in self.result if x["transaction"]== current["transaction"]]
+        curr = [x for x in self.result if x["transaction"] == current["transaction"] and (
+            x["operation"] == 'R' or x["operation"] == 'W')]
 
         # remove the current transaction from the result
         self.result = [
             x for x in self.result if x["transaction"] != current["transaction"]]
 
         # get all transaction that has the same transaction id
-        seq = [x for x in self.sequence if x["transaction"]
-                == current["transaction"]]
-        
+        seq = [x for x in self.sequence if x["transaction"] == current["transaction"]]
+
         # remove the transaction from the sequence
         self.sequence = [
             x for x in self.sequence if x["transaction"] != current["transaction"]]
-        
-        # if the current transaction has a lock in the lock table, remove it
+
+        # if the current transaction has a exclusive lock in the lock table, remove it
         if current["transaction"] in self.exclusive_lock_table.values():
             self.exclusive_lock_table = {
                 k: v for k, v in self.exclusive_lock_table.items() if v != current["transaction"]}
 
+        # if the current transaction has a shared lock in the lock table, remove it
+        if current["transaction"] in [x for v in self.shared_lock_table.values() for x in v]:
+            for k, v in self.shared_lock_table.items():
+                if current["transaction"] in v:
+                    v.remove(current["transaction"])
+            self.shared_lock_table = {
+                k: v for k, v in self.shared_lock_table.items() if v != []}
+
         # add the transaction to the end of the sequence
-        # self.sequence.append(current)
         self.sequence.extend(curr)
+        self.sequence.append(current)
         self.sequence.extend(seq)
 
     def wait_die(self, current: dict) -> None:
-        # check if the current transaction is older than the transaction that is locking the table
-        if (current["table"] in self.exclusive_lock_table and self.timestamp.index(current["transaction"]) < self.timestamp.index(self.exclusive_lock_table[current["table"]])) or (current["table"] in self.shared_lock_table and self.timestamp.index(current["transaction"]) < self.timestamp.index(self.shared_lock_table[current["table"]])):
+        if ((current["table"] in self.exclusive_lock_table and self.timestamp.index(current["transaction"]) < self.timestamp.index(self.exclusive_lock_table[current["table"]])) or
+                (current["table"] in self.shared_lock_table and any(self.timestamp.index(current["transaction"]) < self.timestamp.index(t) for t in self.shared_lock_table[current["table"]] if t != current["transaction"]))):
             # add the current transaction to the queue
             self.queue.append(current)
-            self.transaction_history.append(f'Queue {current["operation"]}{current["transaction"]}({current["table"]})')
+            self.transaction_history.append(f'Queue {current["operation"]}{
+                                            current["transaction"]}({current["table"]})')
         else:  # abort the current transaction
             self.abort(current)
 
@@ -188,16 +213,20 @@ class TwoPhaseLocking:
                 y["transaction"] for y in self.queue]), None)
             # get the current transaction
             current = self.sequence.pop(index)
+            if current["operation"] == 'R':
+                self.exclusive_lock(current["transaction"], current["table"])
 
             # check if current is a commit
             if current["operation"] == 'C':
                 self.commit(current)
             elif current["operation"] == 'R' and self.shared_lock(current["transaction"], current["table"]):
                 self.result.append(current)
-                self.transaction_history.append(f'{current["operation"]}{current["transaction"]}({current["table"]})')
+                self.transaction_history.append(f'{current["operation"]}{
+                                                current["transaction"]}({current["table"]})')
             elif current["operation"] == 'W' and self.exclusive_lock(current["transaction"], current["table"]):
                 self.result.append(current)
-                self.transaction_history.append(f'{current["operation"]}{current["transaction"]}({current["table"]})')
+                self.transaction_history.append(f'{current["operation"]}{
+                                                current["transaction"]}({current["table"]})')
             else:
                 self.wait_die(current)
 
@@ -236,3 +265,5 @@ if __name__ == "__main__":
 # R1(X);R2(Y);W1(Y);W1(X);W1(X);C1;C2
 # R1(X);R2(X);W1(X);W2(X);W3(X);C1;C2;C3
 # R1(X);R1(X);R2(X);R3(X);W1(X);W2(X);W3(X);C1;C2;C3
+# R1(X);R2(X);W2(X);C1;C2
+# R1(X);R2(X);W1(X);C1;C2
