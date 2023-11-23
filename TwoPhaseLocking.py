@@ -135,8 +135,7 @@ class TwoPhaseLocking:
             if self.exclusive_lock(transaction["transaction"], transaction["table"]):
                 # add the transaction to the result
                 self.result.append(transaction)
-                self.transaction_history.append(f'{transaction["operation"]}{
-                                                transaction["transaction"]}({transaction["table"]})')
+                self.transaction_history.append(f'{transaction["operation"]}{transaction["transaction"]}({transaction["table"]})')
             else:  # the table is locked
                 # add the transaction back to the queue
                 self.queue.insert(0, transaction)
@@ -154,8 +153,7 @@ class TwoPhaseLocking:
 
             # add the transaction to the result
             self.result.append(current)
-            self.transaction_history.append(f'{current["operation"]}{
-                                            current["transaction"]}')
+            self.transaction_history.append(f'{current["operation"]}{current["transaction"]}')
 
     def abort(self, current: dict) -> None:
         self.transaction_history.append(
@@ -195,11 +193,10 @@ class TwoPhaseLocking:
 
     def wait_die(self, current: dict) -> None:
         if ((current["table"] in self.exclusive_lock_table and self.timestamp.index(current["transaction"]) < self.timestamp.index(self.exclusive_lock_table[current["table"]])) or
-                (current["table"] in self.shared_lock_table and any(self.timestamp.index(current["transaction"]) < self.timestamp.index(t) for t in self.shared_lock_table[current["table"]] if t != current["transaction"]))):
+                (current["table"] in self.shared_lock_table and all(self.timestamp.index(current["transaction"]) < self.timestamp.index(t) for t in self.shared_lock_table[current["table"]] if t != current["transaction"]))):
             # add the current transaction to the queue
             self.queue.append(current)
-            self.transaction_history.append(f'Queue {current["operation"]}{
-                                            current["transaction"]}({current["table"]})')
+            self.transaction_history.append(f'Queue {current["operation"]}{current["transaction"]}({current["table"]})')
         else:  # abort the current transaction
             self.abort(current)
 
@@ -213,20 +210,16 @@ class TwoPhaseLocking:
                 y["transaction"] for y in self.queue]), None)
             # get the current transaction
             current = self.sequence.pop(index)
-            if current["operation"] == 'R':
-                self.exclusive_lock(current["transaction"], current["table"])
 
             # check if current is a commit
             if current["operation"] == 'C':
                 self.commit(current)
             elif current["operation"] == 'R' and self.shared_lock(current["transaction"], current["table"]):
                 self.result.append(current)
-                self.transaction_history.append(f'{current["operation"]}{
-                                                current["transaction"]}({current["table"]})')
+                self.transaction_history.append(f'{current["operation"]}{current["transaction"]}({current["table"]})')
             elif current["operation"] == 'W' and self.exclusive_lock(current["transaction"], current["table"]):
                 self.result.append(current)
-                self.transaction_history.append(f'{current["operation"]}{
-                                                current["transaction"]}({current["table"]})')
+                self.transaction_history.append(f'{current["operation"]}{current["transaction"]}({current["table"]})')
             else:
                 self.wait_die(current)
 
@@ -267,3 +260,4 @@ if __name__ == "__main__":
 # R1(X);R1(X);R2(X);R3(X);W1(X);W2(X);W3(X);C1;C2;C3
 # R1(X);R2(X);W2(X);C1;C2
 # R1(X);R2(X);W1(X);C1;C2
+# R1(X);R2(X);R3(X);W1(X);W2(X);W3(X);C1;C2;C3
