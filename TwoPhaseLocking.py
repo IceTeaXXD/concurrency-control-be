@@ -61,7 +61,7 @@ class TwoPhaseLocking:
                 self.shared_lock_table[table].append(transaction)
                 self.result.append(
                     {"operation": "SL", "transaction": transaction, "table": table})
-                self.transaction_history.append(f'SL{transaction}({table})')
+                self.transaction_history.append({"transaction" : transaction, "table": table, "operation": "SL", "status": "Success"})
                 return True
 
     def exclusive_lock(self, transaction: int, table: str) -> bool:
@@ -76,7 +76,7 @@ class TwoPhaseLocking:
                 self.exclusive_lock_table[table] = transaction
                 self.result.append(
                     {"operation": "UPL", "transaction": transaction, "table": table})
-                self.transaction_history.append(f'UPL{transaction}({table})')
+                self.transaction_history.append({"transaction" : transaction, "table": table, "operation": "UPL", "status": "Success"})
                 return True
             else:
                 return False
@@ -92,7 +92,7 @@ class TwoPhaseLocking:
                 self.exclusive_lock_table[table] = transaction
                 self.result.append(
                     {"operation": "XL", "transaction": transaction, "table": table})
-                self.transaction_history.append(f'XL{transaction}({table})')
+                self.transaction_history.append({"transaction" : transaction, "table": table, "operation": "XL", "status": "Success"})
                 return True
 
     def clear_shared_lock(self, current: dict) -> None:
@@ -103,8 +103,7 @@ class TwoPhaseLocking:
         for t in table:
             self.result.append(
                 {"operation": "UL", "transaction": current["transaction"], "table": t})
-            self.transaction_history.append(
-                f'UL{current["transaction"]}({t})')
+            self.transaction_history.append({"transaction" : current["transaction"], "table": t, "operation": "UL", "status": "Success"})
         # remove the transaction from the lock table
         for k, v in self.shared_lock_table.items():
             if current["transaction"] in v:
@@ -122,8 +121,7 @@ class TwoPhaseLocking:
             for t in table:
                 self.result.append(
                     {"operation": "UL", "transaction": current["transaction"], "table": t})
-                self.transaction_history.append(
-                    f'UL{current["transaction"]}({t})')
+                self.transaction_history.append({"transaction" : current["transaction"], "table": t, "operation": "UL", "status": "Success"})
             # remove the transaction from the lock table
             self.exclusive_lock_table = {
                 k: v for k, v in self.exclusive_lock_table.items() if v != current["transaction"]}
@@ -135,7 +133,7 @@ class TwoPhaseLocking:
             if self.exclusive_lock(transaction["transaction"], transaction["table"]):
                 # add the transaction to the result
                 self.result.append(transaction)
-                self.transaction_history.append(f'{transaction["operation"]}{transaction["transaction"]}({transaction["table"]})')
+                self.transaction_history.append({"transaction" : transaction["transaction"], "table": transaction["table"], "operation": transaction["operation"], "status": "Success"})
             else:  # the table is locked
                 # add the transaction back to the queue
                 self.queue.insert(0, transaction)
@@ -153,11 +151,10 @@ class TwoPhaseLocking:
 
             # add the transaction to the result
             self.result.append(current)
-            self.transaction_history.append(f'{current["operation"]}{current["transaction"]}')
+            self.transaction_history.append({"transaction" : current["transaction"], "table": "-", "operation": "Commit", "status": "Commit"})
 
     def abort(self, current: dict) -> None:
-        self.transaction_history.append(
-            f'Abort Transaction {current["transaction"]}')
+        self.transaction_history.append({"transaction": current["transaction"], "table": current["table"], "operation": "Abort", "status": "Abort"})
         # get all transaction that has the same transaction id
         curr = [x for x in self.result if x["transaction"] == current["transaction"] and (
             x["operation"] == 'R' or x["operation"] == 'W')]
@@ -196,7 +193,7 @@ class TwoPhaseLocking:
                 (current["table"] in self.shared_lock_table and all(self.timestamp.index(current["transaction"]) < self.timestamp.index(t) for t in self.shared_lock_table[current["table"]] if t != current["transaction"]))):
             # add the current transaction to the queue
             self.queue.append(current)
-            self.transaction_history.append(f'Queue {current["operation"]}{current["transaction"]}({current["table"]})')
+            self.transaction_history.append({"transaction": current["transaction"], "table": current["table"], "operation": current["operation"], "status": "Queue"})
         else:  # abort the current transaction
             self.abort(current)
 
@@ -216,10 +213,10 @@ class TwoPhaseLocking:
                 self.commit(current)
             elif current["operation"] == 'R' and self.shared_lock(current["transaction"], current["table"]):
                 self.result.append(current)
-                self.transaction_history.append(f'{current["operation"]}{current["transaction"]}({current["table"]})')
+                self.transaction_history.append({"transaction": current["transaction"], "table": current["table"], "operation": current["operation"], "status": "Success"})
             elif current["operation"] == 'W' and self.exclusive_lock(current["transaction"], current["table"]):
                 self.result.append(current)
-                self.transaction_history.append(f'{current["operation"]}{current["transaction"]}({current["table"]})')
+                self.transaction_history.append({"transaction": current["transaction"], "table": current["table"], "operation": current["operation"], "status": "Success"})
             else:
                 self.wait_die(current)
 
@@ -234,10 +231,18 @@ class TwoPhaseLocking:
             res = res[:-1]
         return res
 
-    def print_transaction_history(self):
-        print("Transaction History:")
+    def history_string(self):
+        str = ""
         for t in self.transaction_history:
-            print(t)
+            str += f"{t['operation']} {t['transaction']} {t['table'] if 'table' in t else ''}\n"
+        return str
+    
+    def history_json(self):
+        res = []
+        # The format is 'transaction': f'{operation}{table}'
+        for t in self.transaction_history:
+            res.append({t["transaction"]: f'{t["operation"]}{f"({t["table"]})" if "table" in t else ""}'})
+        return res
 
 
 if __name__ == "__main__":
@@ -245,7 +250,7 @@ if __name__ == "__main__":
         lock = TwoPhaseLocking(input("Enter the sequence: "))
         lock.run()
         print(lock.result_string())
-        lock.print_transaction_history()
+        print(lock.transaction_history)
 
     except (ValueError, IndexError) as e:
         print("Error: ", e)
