@@ -239,11 +239,9 @@ class TwoPhaseLocking:
     
     def history_json(self):
         res = []
-        # The format is 'transaction': f'{operation}{table}'
         for t in self.transaction_history:
-            res.append({t["transaction"]: f'{t["operation"]}{f"({t["table"]})" if "table" in t else ""}'})
+            res.append({t["transaction"]: f'{t["operation"]}({t["table"]})'})
         return res
-
 
 if __name__ == "__main__":
     try:
