@@ -72,7 +72,7 @@ class OCC:
             if ti_id != tx_id and ti.timestamps['validation'] < self.transactions[tx_id].timestamps['validation']:
                 if ti.timestamps['finish'] >= self.transactions[tx_id].timestamps['start'] and (ti.timestamps['finish'] < self.transactions[tx_id].timestamps['validation'] or self.transactions[tx_id].timestamps['validation'] == math.inf):
                     if any(write_item in self.transactions[tx_id].reads for write_item in ti.writes):
-                        self.transaction_history.append({"operation": f"Abort due to conflict with {ti.tx_id}", "transaction": tx_id, "status": "aborted"})
+                        self.transaction_history.append({"operation": f"Abort due to conflict with T{ti.tx_id}", "transaction": tx_id, "status": "aborted"})
                         self.abort(tx_id)
                         return
 
@@ -122,23 +122,51 @@ class OCC:
 
             self.current_timestamp += 1
 
+    
+    def history_json(self):
+        res = []
+        for cmd in self.transaction_history:
+            if cmd['status'] == 'success':
+                res.append({"transaction": cmd['transaction'], "operation": cmd['operation'], "table": cmd['table'], "status": 'Success'})
+            elif cmd['status'] == 'commit':
+                res.append({"transaction": cmd['transaction'], "operation": 'Commit', "status": 'Commit'})
+            elif cmd['status'] == 'aborted':
+                res.append({"transaction": cmd['transaction'], "operation": cmd['operation'], "status": 'Abort'})
+        return res
+
+    def result_json(self):
+        res = ""
+        for cmd in self.transaction_history:
+            if cmd['status'] == 'success':
+                res += f"{cmd['operation']}{cmd['transaction']}({cmd['table']});"
+            elif cmd['status'] == 'commit':
+                res += f"{cmd['operation']}{cmd['transaction']};"
+            elif cmd['status'] == 'aborted':
+                res += f"A{cmd['transaction']};"
+        return res
+    
     def __str__(self):
         res = ""
         for cmd in self.transaction_history:
             if cmd['status'] == 'success':
-                res += f"{cmd['operation']}{cmd['transaction']}({cmd['table']})\n"
+                if cmd['operation'] == 'R':
+                    res += f"Transaction {cmd['transaction']} Read {cmd['table']}\n"
+                elif cmd['operation'] == 'W':
+                    res += f"Transaction {cmd['transaction']} Write {cmd['table']}\n"
             elif cmd['status'] == 'commit':
-                res += f"{cmd['operation']}{cmd['transaction']}\n"
+                res += f"Transaction {cmd['transaction']} {cmd['operation']}\n"
             elif cmd['status'] == 'aborted':
-                res += f"T{cmd['transaction']} {cmd['operation']}\n"
+                res += f"Transaction {cmd['transaction']} {cmd['operation']}\n"
         return res
-
 
 if __name__ == '__main__':
     try:
-        input_sequence = input("Enter the sequence: ")
+        input_sequence = input("Enter sequence (delimited by ;): ")
         occ = OCC(input_sequence)
         occ.run()
         print(occ)
+        # print(occ.result_json())    
+        # for res in occ.history_json():
+        #     print(res)
     except Exception as e:
         print("Error:", e)

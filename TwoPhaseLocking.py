@@ -245,10 +245,11 @@ class TwoPhaseLocking:
 
 if __name__ == "__main__":
     try:
-        lock = TwoPhaseLocking(input("Enter the sequence: "))
-        lock.run()
-        print(lock.result_string())
-        print(lock.transaction_history)
+        tpl = TwoPhaseLocking(input("Enter sequence (delimited by ;): "))
+        tpl.run()
+        print(tpl.result_string())
+        for res in tpl.transaction_history:
+            print(res)
 
     except (ValueError, IndexError) as e:
         print("Error: ", e)

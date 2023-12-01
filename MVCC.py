@@ -113,6 +113,29 @@ class MVCC:
             else:
                 raise ValueError("Invalid operation detected")
 
+    def result_json(self):
+        res = ""
+        for t in self.result:
+            if t['operation'] == 'rollback':
+                res += f"A{t['timestamp']};"
+            elif t['operation'] == 'commit':
+                res += f"C{t['transaction']};"
+            elif t['operation'] == 'R' or t['operation'] == 'W':
+                res += f"{t['operation']}{t['transaction']}({t['table']});"
+        return res
+
+
+    def history_json(self):
+        res = []
+        for t in self.result:
+            if t['operation'] == 'rollback':
+                res.append({"transaction": t['transaction'], "operation": f"Rollback w/ timestamp {t['timestamp']}", "status": 'Abort'}) 
+            elif t['operation'] == 'commit':
+                res.append({"transaction": t['transaction'], "operation": 'Commit', "status": 'Commit'})
+            elif t['operation'] == 'R' or t['operation'] == 'W':
+                res.append({"transaction": t['transaction'], "operation": f"{t['operation']}", "table": t['table'], "status": 'Success'})
+        return res
+    
     def __str__(self):
         res = ""
         for i in range(len(self.result)):
@@ -125,23 +148,12 @@ class MVCC:
             elif self.result[i]['operation'] == 'W':
                 res += f"Transaction {self.result[i]['transaction']} Write {self.result[i]['table']} at version {self.result[i]['version']}. Timestamp {self.result[i]['table']}: {self.result[i]['timestamp']}.\n"
         return res
-    
-    def history_json(self):
-        res = []
-        for t in self.result:
-            if t['operation'] == 'rollback':
-                res.append({t['transaction']: f"rollback {t['timestamp']}."})
-            elif t['operation'] == 'commit':
-                res.append({t['transaction']: f"commit."})
-            elif t['operation'] == 'R' or t['operation'] == 'W':
-                res.append({t['transaction']: f"{t['operation']} {t['table']} at version {t['version']}. Timestamp {t['table']}: {t['timestamp']}."})
-        return res
 if __name__ == '__main__':
     try:
         mvcc = MVCC(input("Enter sequence (delimited by ;): "))
         mvcc.run()
         # print(mvcc)
-        
+        print(mvcc.result_json())
         for res in mvcc.history_json():
             print(res)
     except Exception as e:
