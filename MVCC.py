@@ -133,7 +133,7 @@ class MVCC:
             elif t['operation'] == 'commit':
                 res.append({"transaction": t['transaction'], "operation": 'Commit', "status": 'Commit'})
             elif t['operation'] == 'R' or t['operation'] == 'W':
-                res.append({"transaction": t['transaction'], "operation": f"{t['operation']}", "table": t['table'], "status": 'Success'})
+                res.append({"transaction": t['transaction'], "operation": f"{t['operation']}({t['table']}) Version: {t['version']} Timestamp: {t['timestamp']}", "table": t['table'], "status": 'Success'})
         return res
     
     def __str__(self):
