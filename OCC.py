@@ -1,5 +1,6 @@
 import math
 
+
 class Transaction:
     def __init__(self, tx_id):
         self.tx_id = tx_id
@@ -12,8 +13,6 @@ class Transaction:
             "finish": math.inf
         }
 
-    def __str__(self):
-        return f"Transaction {self.tx_id}:\n\tRead Set: {self.reads}\n\tWrite Set: {self.writes}\n\tStatus: {self.status}\n\tTimestamps: {self.timestamps}"
 
 class OCC:
     def __init__(self, input_sequence: str):
@@ -54,6 +53,7 @@ class OCC:
         self.transactions[tx_id].reads.add(cmd['table'])
         self.transaction_history.append(
             {"operation": cmd['operation'], "transaction": tx_id, "table": cmd['table'], "status": "success"})
+        self.result.append(cmd)
 
     def write(self, cmd):
         self.current_timestamp += 1
@@ -61,6 +61,7 @@ class OCC:
         self.transactions[tx_id].writes.add(cmd['table'])
         self.transaction_history.append(
             {"operation": cmd['operation'], "transaction": tx_id, "table": cmd['table'], "status": "success"})
+        self.result.append(cmd)
 
     def validate(self, cmd):
         self.current_timestamp += 1
@@ -69,10 +70,9 @@ class OCC:
 
         for ti_id, ti in self.transactions.items():
             if ti_id != tx_id and ti.timestamps['validation'] < self.transactions[tx_id].timestamps['validation']:
-                if ti.timestamps['finish'] >= self.transactions[tx_id].timestamps['start'] and (
-                        ti.timestamps['finish'] < self.transactions[tx_id].timestamps['validation'] or
-                        self.transactions[tx_id].timestamps['validation'] == math.inf):
+                if ti.timestamps['finish'] >= self.transactions[tx_id].timestamps['start'] and (ti.timestamps['finish'] < self.transactions[tx_id].timestamps['validation'] or self.transactions[tx_id].timestamps['validation'] == math.inf):
                     if any(write_item in self.transactions[tx_id].reads for write_item in ti.writes):
+                        self.transaction_history.append({"operation": f"Abort due to conflict with {ti.tx_id}", "transaction": tx_id, "status": "aborted"})
                         self.abort(tx_id)
                         return
 
@@ -91,23 +91,23 @@ class OCC:
     def abort(self, tx_id):
         self.current_timestamp += 1
         self.transactions[tx_id].timestamps['finish'] = self.current_timestamp
-        self.transaction_history.append(
-            {"operation": 'C', "transaction": tx_id, "status": "aborted"})
         self.transactions[tx_id].status = "Aborted"
-        # Rollback reads and writes
-        for table in self.transactions[tx_id].reads:
-            self.rollback_read(tx_id, table)
-        for table in self.transactions[tx_id].writes:
-            self.rollback_write(tx_id, table)
-
-    def rollback_read(self, tx_id, table):
-        print(f"Rolling back read operation for Transaction {tx_id} on Table {table}")
-
-    def rollback_write(self, tx_id, table):
-        print(f"Rolling back write operation for Transaction {tx_id} on Table {table}")
+        # add all the the tx_id's operations to the back of the sequence
+        for cmd in self.result:
+            if cmd['transaction'] == tx_id:
+                self.sequence.append(cmd)
+        self.sequence.append({"operation": 'C', "transaction": tx_id})
+        # clear the transaction's read and write sets
+        self.transactions[tx_id].reads.clear()
+        self.transactions[tx_id].writes.clear()
+        # clear the transaction's timestamps
+        self.transactions[tx_id].timestamps['start'] = math.inf
+        self.transactions[tx_id].timestamps['validation'] = math.inf
+        self.transactions[tx_id].timestamps['finish'] = math.inf
 
     def run(self):
-        for cmd in self.sequence:
+        while len(self.sequence) > 0:
+            cmd = self.sequence.pop(0)
             tx_id = cmd['transaction']
             if tx_id not in self.transactions:
                 self.transactions[tx_id] = Transaction(tx_id)
@@ -128,9 +128,9 @@ class OCC:
             if cmd['status'] == 'success':
                 res += f"{cmd['operation']}{cmd['transaction']}({cmd['table']})\n"
             elif cmd['status'] == 'commit':
-                res += f"{cmd['operation']}{cmd['transaction']} - commit\n"
+                res += f"{cmd['operation']}{cmd['transaction']}\n"
             elif cmd['status'] == 'aborted':
-                res += f"{cmd['operation']}{cmd['transaction']} - aborted\n"
+                res += f"T{cmd['transaction']} {cmd['operation']}\n"
         return res
 
 
