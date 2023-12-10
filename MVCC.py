@@ -76,19 +76,19 @@ class MVCC:
             max_ver = self.version_table[table][idx_max]['version']
 
             if self.tx_ctr[tx] < read_timestamp:
-                self.result.append({'operation': 'W', 'transaction': tx, 'table': table, 'timestamp': (read_timestamp, self.tx_ctr[tx]), 'version': max_ver})
+                self.result.append({'operation': 'W', 'transaction': tx, 'table': table, 'timestamp': (self.tx_ctr[tx], self.tx_ctr[tx]), 'version': max_ver})
                 self.tx_ctr[tx] = self.ctr
                 self.result.append({'operation': 'rollback', 'transaction': tx, 'timestamp': self.tx_ctr[tx]})
                 self.rollback(tx)
 
             elif self.tx_ctr[tx] == write_timestamp:
-                self.version_table[table][idx_max]['timestamp'] = (read_timestamp, self.tx_ctr[tx])
-                self.result.append({'operation': 'W', 'transaction': tx, 'table': table, 'timestamp': (read_timestamp, self.tx_ctr[tx]), 'version': max_ver})
+                self.version_table[table][idx_max]['timestamp'] = (self.tx_ctr[tx], self.tx_ctr[tx])
+                self.result.append({'operation': 'W', 'transaction': tx, 'table': table, 'timestamp': (self.tx_ctr[tx], self.tx_ctr[tx]), 'version': max_ver})
                 self.ctr += 1
 
             else: 
-                self.version_table[table].append({'transaction': tx, 'timestamp' : (read_timestamp, self.tx_ctr[tx]), 'version': self.tx_ctr[tx]})
-                self.result.append({'operation': 'W', 'transaction': tx, 'table': table, 'timestamp': (read_timestamp, self.tx_ctr[tx]), 'version': self.tx_ctr[tx]})
+                self.version_table[table].append({'transaction': tx, 'timestamp' : (self.tx_ctr[tx], self.tx_ctr[tx]), 'version': self.tx_ctr[tx]})
+                self.result.append({'operation': 'W', 'transaction': tx, 'table': table, 'timestamp': (self.tx_ctr[tx], self.tx_ctr[tx]), 'version': self.tx_ctr[tx]})
                 self.ctr += 1
 
     def rollback(self, tx):
@@ -152,10 +152,10 @@ if __name__ == '__main__':
     try:
         mvcc = MVCC(input("Enter sequence (delimited by ;): "))
         mvcc.run()
-        # print(mvcc)
-        print(mvcc.result_json())
-        for res in mvcc.history_json():
-            print(res)
+        print(mvcc)
+        # print(mvcc.result_json())
+        # for res in mvcc.history_json():
+        #     print(res)
     except Exception as e:
         print("Error: ", e)
         exit(1)
